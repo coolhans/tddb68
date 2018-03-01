@@ -80,7 +80,7 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
-   #define FD_SIZE 130
+   #define FD_SIZE 130 //130-2=128 openable FDs
 struct thread
   {
     /* Owned by thread.c. */
@@ -96,9 +96,14 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-
+//lab1
     struct file* fd_table[FD_SIZE]; //user opened files
 #endif
+
+//lab 2
+    int64_t wake_up_time;
+    struct semaphore wake_up_semaphore;
+    struct list_elem wake_up_elem;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
