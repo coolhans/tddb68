@@ -7,7 +7,6 @@
 #include "threads/io.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
-
 /* See [8254] for hardware details of the 8254 timer chip. */
 
 #if TIMER_FREQ < 19
@@ -46,7 +45,7 @@ timer_init (void)
   outb (0x40, count >> 8);
 
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
-   list_init(&sleeping_threads);
+  list_init(&sleeping_threads);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -96,16 +95,11 @@ timer_elapsed (int64_t then)
 }
 
 /* Suspends execution for approximately TICKS timer ticks. */
-
-//ensure that a thread is woken up before a thread is placed in the sleep list
-bool less_tick_prio (const struct list_elem *left, const struct list_elem *right, void *aux UNUSED){
-  const struct thread *thread_one = list_entry (left, struct thread, timer_el);
-  const struct thread *thread_two = list_entry (right, struct thread, timer_el);
-
-  if (thread_one->target_tick != thread_two->target_tick)
-    return thread_one->target_tick < thread_two->target_tick;
-  else
-    return thread_one->priority > thread_two->priority;
+//lab 2, compare elements
+bool less_func (const struct list_elem *a, const struct list_elem *b, void *aux){
+  const struct thread *t1 = list_entry(a, struct thread, wake_up_elem);
+  const struct thread *t2 = list_entry(b, struct thread, wake_up_elem);
+  return t1->wake_up_time < t2->wake_up_time;
 }
 
 void
@@ -114,19 +108,20 @@ timer_sleep (int64_t ticks)
   int64_t start = timer_ticks ();
   ASSERT (intr_get_level () == INTR_ON);
 
-  //if(ticks <= 0){
-  //  return;
-  //}
-
-  //struct thread* t = thread_current();
-  //t->wake_up_time = start+ticks;
-  //intr_disable();
-  //list_insert_ordered (sleeping_threads, t, , NULL);   //sort list function from list.h
+  struct thread* t = thread_current();
+  t->wake_up_time = start+ticks;
+  //lock_init(&t->timer_lock);
+  sema_init(&t->sema_lock, 0);
+  enum intr_level old_level = intr_disable();
+  intr_disable();
+  list_insert_ordered (&sleeping_threads, &t->wake_up_elem, less_func, NULL);   //sort list function from list.h
+  intr_set_level(old_level); //reactivate interrupt, the previous mode.
   //intr_enable();
+  //lock_acquire(&t->timer_lock);
+  sema_down(&t->sema_lock);
 
-
-  while (timer_elapsed (start) < ticks)
-  thread_yield ();
+  //while (timer_elapsed (start) < ticks)
+  //thread_yield ();
 }
 
 
@@ -164,6 +159,17 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+    //wake up threads
+    while(!list_empty(&sleeping_threads)){
+      struct thread *wake_up_thread = list_entry(list_front(&sleeping_threads), struct thread, wake_up_elem);
+      if((wake_up_thread->wake_up_time) > timer_ticks()){
+        break;
+      }
+      //lock_release(&wake_up_thread->timer_lock);
+      sema_up(&wake_up_thread->sema_lock);
+      //pop from the sleeping_threads queue list
+      list_pop_front(&sleeping_threads);
+    }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

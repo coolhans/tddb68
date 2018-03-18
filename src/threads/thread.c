@@ -277,6 +277,10 @@ thread_exit (void)
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
+  int fd;
+  for(fd=2;fd<FD_SIZE;fd++){ //close all opened files
+    file_close(thread_current()->fd_table[fd]);
+  }
   process_exit ();
 #endif
 
@@ -429,7 +433,8 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
-
+  //sema_init(&t->sema_lock, 0);
+  lock_init(&t->timer_lock);
   #ifdef USERPROG
   //Initialise all pointers to null
   int fd;
